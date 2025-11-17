@@ -1,1268 +1,901 @@
+"""
+Online Course Completion Analysis - Statistical Testing Framework
+Uses: Z-tests, t-tests, ANOVA, Welch ANOVA, Kruskal-Wallis, Correlation tests, Chi-square
+Generates individual PDF reports for each of 22 research objectives
+"""
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
-from scipy.stats import chi2_contingency, f_oneway, mannwhitneyu, kruskal, spearmanr, wilcoxon
-from scipy.stats import rankdata
+from scipy.stats import (
+    norm, chi2_contingency, f_oneway, mannwhitneyu, kruskal, spearmanr, 
+    pearsonr, wilcoxon, levene, ttest_ind, shapiro, kstest, pointbiserialr
+)
 import warnings
 from datetime import datetime
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Image, Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 import io
+import os
 
 warnings.filterwarnings('ignore')
-
-# Set style for better visualizations
 sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (12, 6)
 
-# Load the data
-import os
+# ============================================================================
+# LOAD AND CLEAN DATA
+# ============================================================================
+
 csv_file = os.path.join(os.path.dirname(__file__), 'scenario_6_Online_Course_Completion.xlsx.csv')
 df = pd.read_csv(csv_file)
 
 print("="*80)
-print("ONLINE COURSE COMPLETION ANALYSIS")
+print("ONLINE COURSE COMPLETION ANALYSIS - STATISTICAL TESTING FRAMEWORK")
 print("="*80)
 
-# ============================================================================
-# DATA CLEANING
-# ============================================================================
-print("\n" + "="*80)
-print("DATA CLEANING")
-print("="*80)
-
-print(f"\nOriginal dataset size: {len(df)} observations")
-
-# Check for negative time values
-negative_time = df[df['Time_Spent_Hours'] < 0]
-print(f"\nNegative time values found: {len(negative_time)}")
-if len(negative_time) > 0:
-    print("\nRows with negative time:")
-    print(negative_time[['User_ID', 'Time_Spent_Hours', 'Completed']])
-
-# Remove negative time values
+# Clean data
 df_clean = df[df['Time_Spent_Hours'] >= 0].copy()
-print(f"\nCleaned dataset size: {len(df_clean)} observations")
-print(f"Removed: {len(df) - len(df_clean)} observations")
-
-# ============================================================================
-# 1. DESCRIPTIVE SUMMARY
-# ============================================================================
-print("\n" + "="*80)
-print("1. DESCRIPTIVE SUMMARY")
-print("="*80)
-
-print(f"\nSample Size: n = {len(df_clean)}")
-
-# Completion Rate
-completion_counts = df_clean['Completed'].value_counts()
-completion_pct = df_clean['Completed'].value_counts(normalize=True) * 100
-print(f"\nCompletion Rate:")
-print(f"  Completed (Yes): {completion_counts['Yes']} ({completion_pct['Yes']:.1f}%)")
-print(f"  Not Completed (No): {completion_counts['No']} ({completion_pct['No']:.1f}%)")
-
-# Time Spent Statistics
-print(f"\nTime Spent (Hours):")
-print(f"  Mean: {df_clean['Time_Spent_Hours'].mean():.2f} hours")
-print(f"  Median: {df_clean['Time_Spent_Hours'].median():.2f} hours")
-print(f"  Std Dev: {df_clean['Time_Spent_Hours'].std():.2f} hours")
-print(f"  Min: {df_clean['Time_Spent_Hours'].min():.2f} hours")
-print(f"  Max: {df_clean['Time_Spent_Hours'].max():.2f} hours")
-print(f"  Q1 (25th percentile): {df_clean['Time_Spent_Hours'].quantile(0.25):.2f} hours")
-print(f"  Q3 (75th percentile): {df_clean['Time_Spent_Hours'].quantile(0.75):.2f} hours")
-
-# Course Type Distribution
-print(f"\nCourse Type Distribution:")
-course_counts = df_clean['Course_Type'].value_counts()
-course_pct = df_clean['Course_Type'].value_counts(normalize=True) * 100
-for course in course_counts.index:
-    print(f"  {course}: {course_counts[course]} ({course_pct[course]:.1f}%)")
-
-# Age Distribution
-print(f"\nAge Distribution:")
-print(f"  Mean: {df_clean['Age'].mean():.1f} years")
-print(f"  Std Dev: {df_clean['Age'].std():.1f} years")
-print(f"  Min-Max: {df_clean['Age'].min()}-{df_clean['Age'].max()} years")
-
-# Device Usage
-print(f"\nDevice Usage:")
-device_counts = df_clean['Device_Used'].value_counts()
-device_pct = df_clean['Device_Used'].value_counts(normalize=True) * 100
-for device in device_counts.index:
-    print(f"  {device}: {device_counts[device]} ({device_pct[device]:.1f}%)")
-
-# ============================================================================
-# 2. COMPARE TIME SPENT BY COMPLETION STATUS
-# ============================================================================
-print("\n" + "="*80)
-print("2. COMPARE TIME SPENT BY COMPLETION STATUS")
-print("="*80)
-
-# Group statistics
-completed = df_clean[df_clean['Completed'] == 'Yes']['Time_Spent_Hours']
-not_completed = df_clean[df_clean['Completed'] == 'No']['Time_Spent_Hours']
-
-print(f"\nCompleted (n={len(completed)}):")
-print(f"  Mean: {completed.mean():.2f} hours")
-print(f"  Std Dev: {completed.std():.2f} hours")
-print(f"  Min-Max: {completed.min():.2f} - {completed.max():.2f} hours")
-
-print(f"\nNot Completed (n={len(not_completed)}):")
-print(f"  Mean: {not_completed.mean():.2f} hours")
-print(f"  Std Dev: {not_completed.std():.2f} hours")
-print(f"  Min-Max: {not_completed.min():.2f} - {not_completed.max():.2f} hours")
-
-print(f"\nDifference in Means: {completed.mean() - not_completed.mean():.2f} hours")
-
-# Two-sample t-test
-t_stat, p_value = stats.ttest_ind(completed, not_completed)
-print(f"\nTwo-Sample t-test:")
-print(f"  t-statistic: {t_stat:.3f}")
-print(f"  p-value: {p_value:.4f}")
-if p_value < 0.05:
-    print(f"  Conclusion: SIGNIFICANT difference (p < 0.05)")
-    print(f"  Students who did NOT complete spent MORE time on average!")
-else:
-    print(f"  Conclusion: No significant difference (p >= 0.05)")
-
-# ============================================================================
-# 3. TEST IF AVERAGE TIME SPENT EXCEEDS 15 HOURS
-# ============================================================================
-print("\n" + "="*80)
-print("3. TEST IF AVERAGE TIME SPENT EXCEEDS 15 HOURS")
-print("="*80)
-
-mu_0 = 15  # Hypothesized value from previous study
-sample_mean = df_clean['Time_Spent_Hours'].mean()
-sample_std = df_clean['Time_Spent_Hours'].std()
-n = len(df_clean)
-
-# One-sample t-test (one-tailed)
-t_stat_one = (sample_mean - mu_0) / (sample_std / np.sqrt(n))
-p_value_one = 1 - stats.t.cdf(t_stat_one, df=n-1)  # one-tailed
-
-print(f"\nHypothesis Test:")
-print(f"  H₀: μ ≤ 15 hours")
-print(f"  H₁: μ > 15 hours")
-print(f"  α = 0.05")
-
-print(f"\nTest Statistics:")
-print(f"  Sample Mean: {sample_mean:.2f} hours")
-print(f"  Hypothesized Mean: {mu_0} hours")
-print(f"  Sample Std Dev: {sample_std:.2f} hours")
-print(f"  Sample Size: {n}")
-print(f"  t-statistic: {t_stat_one:.3f}")
-print(f"  p-value (one-tailed): {p_value_one:.4f}")
-
-critical_value = stats.t.ppf(0.95, df=n-1)
-print(f"  Critical value (α=0.05): {critical_value:.3f}")
-
-if p_value_one < 0.05:
-    print(f"\nConclusion: REJECT H₀")
-    print(f"  Average time DOES exceed 15 hours significantly.")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀")
-    print(f"  Average time does NOT significantly exceed 15 hours.")
-    print(f"  In fact, it's slightly below the hypothesized value.")
-
-# ============================================================================
-# 4. COMPARE COURSE TYPE BY COMPLETION STATUS
-# ============================================================================
-print("\n" + "="*80)
-print("4. COMPARE COURSE TYPE BY COMPLETION STATUS")
-print("="*80)
-
-# Create contingency table
-ct_course = pd.crosstab(df_clean['Course_Type'], df_clean['Completed'], margins=True)
-print("\nContingency Table (Observed Frequencies):")
-print(ct_course)
-
-# Calculate percentages
-ct_course_pct = pd.crosstab(df_clean['Course_Type'], df_clean['Completed'], normalize='index') * 100
-print("\nRow Percentages:")
-print(ct_course_pct.round(1))
-
-# Chi-square test
-chi2, p_val, dof, expected = chi2_contingency(pd.crosstab(df_clean['Course_Type'], df_clean['Completed']))
-
-print(f"\nChi-Square Test of Independence:")
-print(f"  χ² statistic: {chi2:.3f}")
-print(f"  Degrees of freedom: {dof}")
-print(f"  p-value: {p_val:.4f}")
-print(f"  Critical value (α=0.05): {stats.chi2.ppf(0.95, dof):.3f}")
-
-if p_val < 0.05:
-    print(f"\nConclusion: SIGNIFICANT association (p < 0.05)")
-    print(f"  Course type influences completion likelihood.")
-else:
-    print(f"\nConclusion: Marginally significant association (p = {p_val:.3f})")
-    print(f"  Course type may influence completion likelihood.")
-
-print("\nExpected Frequencies:")
-expected_df = pd.DataFrame(expected, 
-                          index=pd.crosstab(df_clean['Course_Type'], df_clean['Completed']).index,
-                          columns=pd.crosstab(df_clean['Course_Type'], df_clean['Completed']).columns)
-print(expected_df.round(1))
-
-# ============================================================================
-# 5. COMPARE DEVICE USED BY TIME SPENT (Parametric & Non-Parametric)
-# ============================================================================
-print("\n" + "="*80)
-print("5. COMPARE DEVICE USED BY TIME SPENT (Parametric & Non-Parametric)")
-print("="*80)
-
-# Group statistics by device
-print("\nDescriptive Statistics by Device:")
-device_stats = df_clean.groupby('Device_Used')['Time_Spent_Hours'].agg([
-    ('n', 'count'),
-    ('Mean', 'mean'),
-    ('Median', 'median'),
-    ('Std Dev', 'std'),
-    ('Min', 'min'),
-    ('Max', 'max')
-])
-print(device_stats.round(2))
-
-# ANOVA (Parametric)
-desktop = df_clean[df_clean['Device_Used'] == 'Desktop']['Time_Spent_Hours']
-mobile = df_clean[df_clean['Device_Used'] == 'Mobile']['Time_Spent_Hours']
-tablet = df_clean[df_clean['Device_Used'] == 'Tablet']['Time_Spent_Hours']
-
-f_stat, p_val_anova = f_oneway(desktop, mobile, tablet)
-
-print(f"\nOne-Way ANOVA (Parametric):")
-print(f"  F-statistic: {f_stat:.3f}")
-print(f"  p-value: {p_val_anova:.4f}")
-
-if p_val_anova < 0.05:
-    print(f"  Conclusion: SIGNIFICANT difference (p < 0.05)")
-else:
-    print(f"  Conclusion: NO significant difference (p >= 0.05)")
-
-# Kruskal-Wallis H Test (Non-Parametric alternative to ANOVA)
-h_stat, p_val_kw = kruskal(desktop, mobile, tablet)
-
-print(f"\nKruskal-Wallis H Test (Non-Parametric):")
-print(f"  H-statistic: {h_stat:.3f}")
-print(f"  p-value: {p_val_kw:.4f}")
-
-if p_val_kw < 0.05:
-    print(f"  Conclusion: SIGNIFICANT difference (p < 0.05)")
-    print(f"  Device type affects time spent (distribution-based).")
-else:
-    print(f"  Conclusion: NO significant difference (p >= 0.05)")
-    print(f"  Time spent distributions are similar across all devices.")
-
-# Calculate Sum of Squares for detailed output
-grand_mean = df_clean['Time_Spent_Hours'].mean()
-ss_between = sum([len(df_clean[df_clean['Device_Used'] == device]) * 
-                  (df_clean[df_clean['Device_Used'] == device]['Time_Spent_Hours'].mean() - grand_mean)**2 
-                  for device in df_clean['Device_Used'].unique()])
-ss_within = sum([(len(df_clean[df_clean['Device_Used'] == device]) - 1) * 
-                 df_clean[df_clean['Device_Used'] == device]['Time_Spent_Hours'].var() 
-                 for device in df_clean['Device_Used'].unique()])
-
-print(f"\nANOVA Details:")
-print(f"  SS Between: {ss_between:.2f}")
-print(f"  SS Within: {ss_within:.2f}")
-print(f"  MS Between: {ss_between/2:.2f}")
-print(f"  MS Within: {ss_within/(len(df_clean)-3):.2f}")
-
-# ============================================================================
-# 6. ADDITIONAL ANALYSIS: AGE EFFECT ON COMPLETION
-# ============================================================================
-print("\n" + "="*80)
-print("6. ADDITIONAL ANALYSIS: AGE EFFECT ON COMPLETION")
-print("="*80)
-
-# Create age groups
-df_clean['Age_Group'] = pd.cut(df_clean['Age'], bins=[17, 29, 39, 49, 60], 
-                                labels=['18-29', '30-39', '40-49', '50-59'])
-
-# Completion rate by age group
-age_completion = pd.crosstab(df_clean['Age_Group'], df_clean['Completed'], normalize='index') * 100
-print("\nCompletion Rate by Age Group:")
-print(age_completion.round(1))
-
-# Chi-square test
-chi2_age, p_val_age, dof_age, _ = chi2_contingency(pd.crosstab(df_clean['Age_Group'], df_clean['Completed']))
-print(f"\nChi-Square Test:")
-print(f"  χ² statistic: {chi2_age:.3f}")
-print(f"  p-value: {p_val_age:.4f}")
-
-if p_val_age < 0.05:
-    print(f"  Conclusion: SIGNIFICANT relationship between age and completion")
-else:
-    print(f"  Conclusion: NO significant relationship between age and completion")
-
-# ============================================================================
-# 7. OPTIMAL TIME RANGE FOR COMPLETION
-# ============================================================================
-print("\n" + "="*80)
-print("7. OPTIMAL TIME RANGE FOR COMPLETION")
-print("="*80)
-
-# Create time quartiles
-df_clean['Time_Quartile'] = pd.qcut(df_clean['Time_Spent_Hours'], q=4, 
-                                     labels=['Q1 (Low)', 'Q2 (Med-Low)', 'Q3 (Med-High)', 'Q4 (High)'])
-
-# Completion rate by time quartile
-time_completion = pd.crosstab(df_clean['Time_Quartile'], df_clean['Completed'], normalize='index') * 100
-print("\nCompletion Rate by Time Quartile:")
-print(time_completion.round(1))
-
-print("\nKey Finding:")
-if time_completion.loc['Q1 (Low)', 'Yes'] > time_completion.loc['Q4 (High)', 'Yes']:
-    print("  Students in lower time quartiles have HIGHER completion rates.")
-    print("  This suggests more time doesn't necessarily mean better outcomes.")
-
-# ============================================================================
-# 8. DEVICE-COURSE TYPE INTERACTION
-# ============================================================================
-print("\n" + "="*80)
-print("8. DEVICE-COURSE TYPE INTERACTION")
-print("="*80)
-
-device_course = pd.crosstab(df_clean['Device_Used'], df_clean['Course_Type'])
-print("\nDevice Distribution by Course Type:")
-print(device_course)
-
-chi2_int, p_val_int, dof_int, _ = chi2_contingency(device_course)
-print(f"\nChi-Square Test:")
-print(f"  χ² statistic: {chi2_int:.3f}")
-print(f"  p-value: {p_val_int:.4f}")
-
-if p_val_int < 0.05:
-    print(f"  Conclusion: SIGNIFICANT interaction between device and course type")
-else:
-    print(f"  Conclusion: NO significant interaction")
-
-# ============================================================================
-# 9. ADDITIONAL RESEARCH OBJECTIVE: MANN-WHITNEY U TEST
-#    Objective: Non-parametric test comparing time spent by completion status
-# ============================================================================
-print("\n" + "="*80)
-print("9. MANN-WHITNEY U TEST (Non-Parametric)")
-print("   Research Objective: Compare distributions of time spent")
-print("   between completed and non-completed students")
-print("="*80)
-
-u_stat, p_val_mw = mannwhitneyu(completed, not_completed, alternative='two-sided')
-
-print(f"\nMann-Whitney U Test Statistics:")
-print(f"  U-statistic: {u_stat:.3f}")
-print(f"  p-value: {p_val_mw:.4f}")
-print(f"  Completed group median: {completed.median():.2f} hours")
-print(f"  Not Completed group median: {not_completed.median():.2f} hours")
-
-if p_val_mw < 0.05:
-    print(f"\nConclusion: SIGNIFICANT difference in distributions (p < 0.05)")
-    print(f"  Non-parametric test confirms completion status affects time spent.")
-else:
-    print(f"\nConclusion: NO significant difference (p >= 0.05)")
-
-# Calculate effect size (rank-biserial correlation)
-n1, n2 = len(completed), len(not_completed)
-r_rb = 1 - (2*u_stat) / (n1 * n2)
-print(f"\nEffect Size (Rank-Biserial Correlation): {r_rb:.3f}")
-if abs(r_rb) < 0.1:
-    print("  Interpretation: Negligible effect")
-elif abs(r_rb) < 0.3:
-    print("  Interpretation: Small effect")
-elif abs(r_rb) < 0.5:
-    print("  Interpretation: Medium effect")
-else:
-    print("  Interpretation: Large effect")
-
-# ============================================================================
-# 10. ADDITIONAL RESEARCH OBJECTIVE: SPEARMAN'S RANK CORRELATION
-#     Objective: Correlation between Age and Time Spent (non-parametric)
-# ============================================================================
-print("\n" + "="*80)
-print("10. SPEARMAN'S RANK CORRELATION TEST (Non-Parametric)")
-print("    Research Objective: Assess relationship between age and time spent")
-print("="*80)
-
-rho, p_val_spearman = spearmanr(df_clean['Age'], df_clean['Time_Spent_Hours'])
-
-print(f"\nSpearman's Rank Correlation:")
-print(f"  Correlation coefficient (ρ): {rho:.4f}")
-print(f"  p-value: {p_val_spearman:.4f}")
-
-if p_val_spearman < 0.05:
-    if rho > 0:
-        print(f"\nConclusion: SIGNIFICANT positive correlation (p < 0.05)")
-        print(f"  Older students tend to spend more time on courses.")
-    else:
-        print(f"\nConclusion: SIGNIFICANT negative correlation (p < 0.05)")
-        print(f"  Older students tend to spend less time on courses.")
-else:
-    print(f"\nConclusion: NO significant correlation (p >= 0.05)")
-    print(f"  Age and time spent are not significantly correlated.")
-
-# Interpretation
-if abs(rho) < 0.2:
-    strength = "very weak"
-elif abs(rho) < 0.4:
-    strength = "weak"
-elif abs(rho) < 0.6:
-    strength = "moderate"
-elif abs(rho) < 0.8:
-    strength = "strong"
-else:
-    strength = "very strong"
-print(f"\nCorrelation Strength: {strength}")
-
-# ============================================================================
-# 11. ADDITIONAL RESEARCH OBJECTIVE: TIME SPENT BY COURSE TYPE (Non-Parametric)
-#     Objective: Compare distributions of time spent across course types
-# ============================================================================
-print("\n" + "="*80)
-print("11. KRUSKAL-WALLIS TEST FOR COURSE TYPE")
-print("    Research Objective: Compare time spent distributions across")
-print("    different course types (Creative, Technical, Business)")
-print("="*80)
-
-creative_time = df_clean[df_clean['Course_Type'] == 'Creative']['Time_Spent_Hours']
-technical_time = df_clean[df_clean['Course_Type'] == 'Technical']['Time_Spent_Hours']
-business_time = df_clean[df_clean['Course_Type'] == 'Business']['Time_Spent_Hours']
-
-print(f"\nDescriptive Statistics by Course Type:")
-print(f"  Creative (n={len(creative_time)}):")
-print(f"    Mean: {creative_time.mean():.2f} hours, Median: {creative_time.median():.2f} hours")
-print(f"  Technical (n={len(technical_time)}):")
-print(f"    Mean: {technical_time.mean():.2f} hours, Median: {technical_time.median():.2f} hours")
-print(f"  Business (n={len(business_time)}):")
-print(f"    Mean: {business_time.mean():.2f} hours, Median: {business_time.median():.2f} hours")
-
-h_stat_course, p_val_kw_course = kruskal(creative_time, technical_time, business_time)
-
-print(f"\nKruskal-Wallis H Test:")
-print(f"  H-statistic: {h_stat_course:.3f}")
-print(f"  p-value: {p_val_kw_course:.4f}")
-
-if p_val_kw_course < 0.05:
-    print(f"\nConclusion: SIGNIFICANT difference (p < 0.05)")
-    print(f"  Course type influences time spent (distribution-based).")
-else:
-    print(f"\nConclusion: NO significant difference (p >= 0.05)")
-    print(f"  Time distributions are similar across course types.")
-
-# ============================================================================
-# 12. ADDITIONAL RESEARCH OBJECTIVE: AGE AND COMPLETION (Correlation)
-#     Objective: Assess relationship between age and completion rate
-# ============================================================================
-print("\n" + "="*80)
-print("12. POINT-BISERIAL CORRELATION: AGE vs COMPLETION")
-print("    Research Objective: Determine if age correlates with completion")
-print("="*80)
-
-# Convert Completed to binary (Yes=1, No=0)
 df_clean['Completed_Binary'] = (df_clean['Completed'] == 'Yes').astype(int)
 
-# Calculate point-biserial correlation
-corr_age_completion = stats.pointbiserialr(df_clean['Completed_Binary'], df_clean['Age'])
-
-print(f"\nPoint-Biserial Correlation:")
-print(f"  Correlation coefficient: {corr_age_completion[0]:.4f}")
-print(f"  p-value: {corr_age_completion[1]:.4f}")
-
-if corr_age_completion[1] < 0.05:
-    print(f"\nConclusion: SIGNIFICANT correlation (p < 0.05)")
-    if corr_age_completion[0] > 0:
-        print(f"  Older students are more likely to complete courses.")
-    else:
-        print(f"  Younger students are more likely to complete courses.")
-else:
-    print(f"\nConclusion: NO significant correlation (p >= 0.05)")
-    print(f"  Age does not significantly affect completion likelihood.")
+print(f"\nDataset: {len(df_clean)} observations cleaned")
+print(f"Variables: {', '.join(df_clean.columns)}")
 
 # ============================================================================
-# 13. ADDITIONAL RESEARCH OBJECTIVE: EFFECT SIZES (Cohen's d, Cramer's V)
-#     Objective: Quantify practical significance of findings
+# OBJECTIVE 1: Two-Sample t-Test - Time by Completion Status
 # ============================================================================
-print("\n" + "="*80)
-print("13. EFFECT SIZE ANALYSIS")
-print("    Research Objective: Measure practical significance of differences")
-print("="*80)
 
-# Cohen's d for time spent by completion status
-def cohens_d(group1, group2):
-    n1, n2 = len(group1), len(group2)
-    var1, var2 = group1.var(), group2.var()
-    pooled_std = np.sqrt(((n1-1)*var1 + (n2-1)*var2) / (n1+n2-2))
-    return (group1.mean() - group2.mean()) / pooled_std
-
-d = cohens_d(completed, not_completed)
-
-print(f"\nCohen's d (Time Spent: Completed vs Not Completed):")
-print(f"  Cohen's d: {d:.4f}")
-if abs(d) < 0.2:
-    print("  Interpretation: Negligible effect")
-elif abs(d) < 0.5:
-    print("  Interpretation: Small effect")
-elif abs(d) < 0.8:
-    print("  Interpretation: Medium effect")
-else:
-    print("  Interpretation: Large effect")
-
-# Cramer's V for categorical associations
-def cramers_v(chi2, n, min_dim):
-    return np.sqrt(chi2 / (n * (min_dim - 1)))
-
-# Course Type vs Completion
-ct_course_chi = chi2
-ct_course_n = len(df_clean)
-ct_course_minc = min(len(df_clean['Course_Type'].unique()), len(df_clean['Completed'].unique())) 
-cramers_course = cramers_v(ct_course_chi, ct_course_n, ct_course_minc)
-
-print(f"\nCramer's V (Course Type vs Completion):")
-print(f"  Cramer's V: {cramers_course:.4f}")
-if cramers_course < 0.1:
-    print("  Interpretation: Negligible association")
-elif cramers_course < 0.3:
-    print("  Interpretation: Small association")
-elif cramers_course < 0.5:
-    print("  Interpretation: Medium association")
-else:
-    print("  Interpretation: Large association")
-
-# ============================================================================
-# 14. ADDITIONAL RESEARCH OBJECTIVE: DEVICE × COMPLETION INTERACTION
-#     Objective: Assess if device type affects completion differently
-# ============================================================================
-print("\n" + "="*80)
-print("14. DEVICE TYPE vs COMPLETION STATUS")
-print("    Research Objective: Determine if device influences completion")
-print("="*80)
-
-device_completion = pd.crosstab(df_clean['Device_Used'], df_clean['Completed'])
-print("\nContingency Table (Device × Completion):")
-print(device_completion)
-
-chi2_dev_comp, p_val_dev_comp, dof_dev_comp, exp_dev_comp = chi2_contingency(device_completion)
-
-print(f"\nChi-Square Test of Independence:")
-print(f"  χ² statistic: {chi2_dev_comp:.3f}")
-print(f"  p-value: {p_val_dev_comp:.4f}")
-print(f"  Degrees of freedom: {dof_dev_comp}")
-
-device_completion_pct = pd.crosstab(df_clean['Device_Used'], df_clean['Completed'], normalize='index') * 100
-print(f"\nCompletion Rate by Device (%):")
-print(device_completion_pct.round(1))
-
-if p_val_dev_comp < 0.05:
-    print(f"\nConclusion: SIGNIFICANT association (p < 0.05)")
-    print(f"  Device type influences completion likelihood.")
-else:
-    print(f"\nConclusion: NO significant association (p >= 0.05)")
-    print(f"  Completion is independent of device type.")
-
-# Calculate effect size
-cramers_dev = cramers_v(chi2_dev_comp, ct_course_n, 2)
-print(f"\nEffect Size (Cramer's V): {cramers_dev:.4f}")
+def objective_1():
+    """Compare mean time spent between completed and non-completed students using t-test"""
+    completed = df_clean[df_clean['Completed'] == 'Yes']['Time_Spent_Hours'].values
+    not_completed = df_clean[df_clean['Completed'] == 'No']['Time_Spent_Hours'].values
+    
+    t_stat, p_value = ttest_ind(completed, not_completed)
+    
+    # Normality test
+    _, p_shapiro_completed = shapiro(completed[:5000] if len(completed) > 5000 else completed)
+    _, p_shapiro_not = shapiro(not_completed[:5000] if len(not_completed) > 5000 else not_completed)
+    
+    # Homogeneity of variance (Levene's test)
+    levene_stat, p_levene = levene(completed, not_completed)
+    
+    # Welch's t-test (when variances are unequal)
+    welch_stat, p_welch = ttest_ind(completed, not_completed, equal_var=False)
+    
+    # Cohen's d effect size
+    pooled_std = np.sqrt((np.std(completed, ddof=1)**2 + np.std(not_completed, ddof=1)**2) / 2)
+    cohens_d = (np.mean(completed) - np.mean(not_completed)) / pooled_std
+    
+    results = {
+        'title': 'Two-Sample t-Test: Time Spent by Completion Status',
+        'hypothesis': 'H₀: μ_completed = μ_not_completed',
+        'test_type': 'Independent Samples t-Test & Welch t-Test',
+        'n_completed': len(completed),
+        'n_not_completed': len(not_completed),
+        'mean_completed': np.mean(completed),
+        'mean_not_completed': np.mean(not_completed),
+        'std_completed': np.std(completed, ddof=1),
+        'std_not_completed': np.std(not_completed, ddof=1),
+        't_statistic': t_stat,
+        'p_value': p_value,
+        'welch_statistic': welch_stat,
+        'p_welch': p_welch,
+        'shapiro_p_completed': p_shapiro_completed,
+        'shapiro_p_not': p_shapiro_not,
+        'levene_statistic': levene_stat,
+        'p_levene': p_levene,
+        'cohens_d': cohens_d,
+        'completed_data': completed,
+        'not_completed_data': not_completed,
+        'objective_num': 1
+    }
+    return results
 
 # ============================================================================
-# 15. ADDITIONAL RESEARCH OBJECTIVE: COMPLETION TIME EFFICIENCY
-#     Objective: Identify optimal time range and efficiency metrics
+# OBJECTIVE 2: Two-Sample Z-Test for Proportions
 # ============================================================================
-print("\n" + "="*80)
-print("15. COMPLETION EFFICIENCY ANALYSIS")
-print("    Research Objective: Evaluate optimal learning time and efficiency")
-print("="*80)
 
-# Completion rate by decile
-df_clean['Time_Decile'] = pd.qcut(df_clean['Time_Spent_Hours'], q=10, duplicates='drop')
-completion_by_decile = df_clean.groupby('Time_Decile')['Completed'].apply(
-    lambda x: (x == 'Yes').sum() / len(x) * 100
-)
-
-print(f"\nCompletion Rate by Time Decile:")
-for idx, (time_range, completion_rate) in enumerate(completion_by_decile.items(), 1):
-    print(f"  Decile {idx}: {time_range} → {completion_rate:.1f}% completion")
-
-optimal_decile = completion_by_decile.idxmax()
-optimal_completion = completion_by_decile.max()
-print(f"\nOptimal Time Range: {optimal_decile}")
-print(f"Highest Completion Rate: {optimal_completion:.1f}%")
-
-# Efficiency metric: Completion rate per hour
-print(f"\nEfficiency Analysis:")
-for course_type in df_clean['Course_Type'].unique():
-    course_data = df_clean[df_clean['Course_Type'] == course_type]
-    completion_rate = (course_data['Completed'] == 'Yes').sum() / len(course_data) * 100
-    avg_time = course_data['Time_Spent_Hours'].mean()
-    efficiency = completion_rate / avg_time if avg_time > 0 else 0
-    print(f"  {course_type}: {completion_rate:.1f}% completion in {avg_time:.2f} hours")
-    print(f"    Efficiency: {efficiency:.4f} (completion % per hour)")
-
-# ============================================================================
-# 16. ADDITIONAL RESEARCH OBJECTIVE: NON-PARAMETRIC CORRELATION (Device & Time)
-#     Objective: Spearman correlation between device usage frequency and time
-# ============================================================================
-print("\n" + "="*80)
-print("16. DEVICE PREFERENCE AND TIME SPENT (Spearman Correlation)")
-print("    Research Objective: Assess relationship between device usage")
-print("    patterns and actual time spent")
-print("="*80)
-
-# Create numeric encoding for devices
-device_encode = {'Desktop': 1, 'Mobile': 2, 'Tablet': 3}
-df_clean['Device_Code'] = df_clean['Device_Used'].map(device_encode)
-
-rho_device, p_val_device = spearmanr(df_clean['Device_Code'], df_clean['Time_Spent_Hours'])
-
-print(f"\nSpearman's Rank Correlation (Device ↔ Time Spent):")
-print(f"  Correlation coefficient (ρ): {rho_device:.4f}")
-print(f"  p-value: {p_val_device:.4f}")
-print(f"\nNote: Device encoding (Desktop=1, Mobile=2, Tablet=3)")
-
-if p_val_device < 0.05:
-    print(f"\nConclusion: SIGNIFICANT correlation (p < 0.05)")
-    if rho_device > 0:
-        print(f"  Students on Tablets spend more time than Desktop users.")
-    else:
-        print(f"  Desktop users spend more time than Tablet users.")
-else:
-    print(f"\nConclusion: NO significant correlation (p >= 0.05)")
+def objective_2():
+    """Test if completion rate differs by device type using Z-test"""
+    desktop = df_clean[df_clean['Device_Used'] == 'Desktop']
+    mobile = df_clean[df_clean['Device_Used'] == 'Mobile']
+    
+    n1 = len(desktop)
+    x1 = (desktop['Completed'] == 'Yes').sum()
+    p1 = x1 / n1
+    
+    n2 = len(mobile)
+    x2 = (mobile['Completed'] == 'Yes').sum()
+    p2 = x2 / n2
+    
+    p_pooled = (x1 + x2) / (n1 + n2)
+    se = np.sqrt(p_pooled * (1 - p_pooled) * (1/n1 + 1/n2))
+    z_stat = (p1 - p2) / se if se > 0 else 0
+    p_value = 2 * (1 - norm.cdf(abs(z_stat)))
+    
+    results = {
+        'title': 'Two-Sample Z-Test for Proportions: Desktop vs Mobile',
+        'hypothesis': 'H₀: p_desktop = p_mobile',
+        'test_type': 'Two-Sample Z-Test for Proportions',
+        'n_desktop': n1,
+        'x_desktop': x1,
+        'p_desktop': p1,
+        'n_mobile': n2,
+        'x_mobile': x2,
+        'p_mobile': p2,
+        'z_statistic': z_stat,
+        'p_value': p_value,
+        'objective_num': 2
+    }
+    return results
 
 # ============================================================================
-# 17. RESEARCH OBJECTIVE: COMPLETION TIME CONCENTRATION
-#     Hypothesis: Completers cluster in specific time ranges
+# OBJECTIVE 3: One-Sample Z-Test for Proportion
 # ============================================================================
-print("\n" + "="*80)
-print("17. COMPLETION TIME CONCENTRATION TEST")
-print("    Research Objective: Do successful students cluster in time patterns?")
-print("="*80)
 
-# Create narrow time bins
-df_clean['Time_Bin'] = pd.cut(df_clean['Time_Spent_Hours'], bins=15)
-
-# Compare completion rates across bins
-completion_by_bin = df_clean.groupby('Time_Bin')['Completed_Binary'].agg(['sum', 'count', 'mean'])
-completion_by_bin.columns = ['Completed', 'Total', 'Completion_Rate']
-
-# Chi-square for distribution
-contingency_time_bin = pd.crosstab(df_clean['Time_Bin'], df_clean['Completed'])
-chi2_bin, p_val_bin, _, _ = chi2_contingency(contingency_time_bin)
-
-print(f"\nCompletion Distribution Across Time Bins:")
-print(completion_by_bin.round(3))
-
-print(f"\nChi-Square Test (Time Bins × Completion):")
-print(f"  χ² statistic: {chi2_bin:.3f}")
-print(f"  p-value: {p_val_bin:.4f}")
-
-# Calculate variance in completion rates
-completion_rates = completion_by_bin['Completion_Rate'].dropna()
-completion_variance = completion_rates.var()
-completion_cv = completion_rates.std() / completion_rates.mean()
-
-print(f"\nCompletion Rate Variability:")
-print(f"  Mean rate: {completion_rates.mean():.3f}")
-print(f"  Variance: {completion_variance:.3f}")
-print(f"  Coefficient of Variation: {completion_cv:.3f}")
-
-if p_val_bin < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Completion rates vary significantly across time bins!")
-    print(f"  Students show distinct success patterns at different time investments")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
-    print(f"  Completion is independent of specific time ranges")
+def objective_3():
+    """Test if completion rate differs from 50%"""
+    total = len(df_clean)
+    completed = (df_clean['Completed'] == 'Yes').sum()
+    p_observed = completed / total
+    p_null = 0.5
+    
+    se = np.sqrt(p_null * (1 - p_null) / total)
+    z_stat = (p_observed - p_null) / se
+    p_value = 2 * (1 - norm.cdf(abs(z_stat)))
+    
+    results = {
+        'title': 'One-Sample Z-Test for Proportion: Overall Completion vs 50%',
+        'hypothesis': 'H₀: p = 0.5',
+        'test_type': 'One-Sample Z-Test for Proportions',
+        'n_total': total,
+        'n_completed': completed,
+        'p_observed': p_observed,
+        'p_null': p_null,
+        'z_statistic': z_stat,
+        'p_value': p_value,
+        'objective_num': 3
+    }
+    return results
 
 # ============================================================================
-# 18. RESEARCH OBJECTIVE: TIME DISTRIBUTION SHAPE ANALYSIS
-#     Hypothesis: Course types differ in time distribution skewness
+# OBJECTIVE 4: Pearson Correlation - Age vs Time
 # ============================================================================
-print("\n" + "="*80)
-print("18. SKEWNESS ANALYSIS: TIME DISTRIBUTION BY COURSE TYPE")
-print("    Research Objective: Do courses have different learning curves?")
-print("="*80)
 
-# Get time data by course
-creative_times = df_clean[df_clean['Course_Type'] == 'Creative']['Time_Spent_Hours']
-technical_times = df_clean[df_clean['Course_Type'] == 'Technical']['Time_Spent_Hours']
-business_times = df_clean[df_clean['Course_Type'] == 'Business']['Time_Spent_Hours']
-
-print(f"\nTime Distribution Characteristics by Course Type:")
-print(f"  Creative:")
-print(f"    Mean: {creative_times.mean():.2f}, Median: {creative_times.median():.2f}")
-print(f"    Skewness: {creative_times.skew():.4f}, Kurtosis: {creative_times.kurtosis():.4f}")
-
-print(f"  Technical:")
-print(f"    Mean: {technical_times.mean():.2f}, Median: {technical_times.median():.2f}")
-print(f"    Skewness: {technical_times.skew():.4f}, Kurtosis: {technical_times.kurtosis():.4f}")
-
-print(f"  Business:")
-print(f"    Mean: {business_times.mean():.2f}, Median: {business_times.median():.2f}")
-print(f"    Skewness: {business_times.skew():.4f}, Kurtosis: {business_times.kurtosis():.4f}")
-
-# Levene's test for variance
-stat_levene, p_val_levene = stats.levene(creative_times, technical_times, business_times)
-
-print(f"\nLevene's Test (Equality of Variances Across Courses):")
-print(f"  Test statistic: {stat_levene:.3f}")
-print(f"  p-value: {p_val_levene:.4f}")
-
-if p_val_levene < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Course types have significantly different time distributions!")
-    print(f"  Implications: Courses require different pedagogical approaches")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
+def objective_4():
+    """Linear relationship between age and time spent"""
+    age = df_clean['Age'].values
+    time = df_clean['Time_Spent_Hours'].values
+    
+    r_pearson, p_pearson = pearsonr(age, time)
+    
+    _, p_age_norm = shapiro(age[:5000] if len(age) > 5000 else age)
+    _, p_time_norm = shapiro(time[:5000] if len(time) > 5000 else time)
+    
+    slope, intercept = np.polyfit(age, time, 1)
+    r_squared = r_pearson ** 2
+    
+    results = {
+        'title': "Pearson's Correlation: Age vs Time Spent",
+        'hypothesis': 'H₀: ρ = 0',
+        'test_type': "Pearson's Product-Moment Correlation",
+        'r_pearson': r_pearson,
+        'p_value': p_pearson,
+        'r_squared': r_squared,
+        'slope': slope,
+        'intercept': intercept,
+        'age': age,
+        'time': time,
+        'objective_num': 4
+    }
+    return results
 
 # ============================================================================
-# 19. RESEARCH OBJECTIVE: COMPLETION RATE STABILITY
-#     Hypothesis: Completion rate varies significantly by course-device combo
+# OBJECTIVE 5: One-Way ANOVA - Time by Course Type
 # ============================================================================
-print("\n" + "="*80)
-print("19. COMPLETION BY COURSE-DEVICE COMBINATION")
-print("    Research Objective: Does course×device interaction affect completion?")
-print("="*80)
 
-# Create all combinations and test
-completion_by_combo = pd.crosstab(
-    [df_clean['Course_Type'], df_clean['Device_Used']], 
-    df_clean['Completed']
-)
-
-print("\nCompletion Rate by Course-Device Combination:")
-combo_completion_rates = []
-for course in ['Business', 'Creative', 'Technical']:
-    for device in ['Desktop', 'Mobile', 'Tablet']:
-        mask = (df_clean['Course_Type'] == course) & (df_clean['Device_Used'] == device)
-        if mask.sum() > 0:
-            rate = (df_clean[mask]['Completed'] == 'Yes').sum() / mask.sum() * 100
-            combo_completion_rates.append(rate)
-            print(f"  {course} + {device}: {rate:.1f}% (n={mask.sum()})")
-
-chi2_combo, p_val_combo, _, _ = chi2_contingency(completion_by_combo)
-
-print(f"\nChi-Square Test (Course × Device × Completion):")
-print(f"  χ² statistic: {chi2_combo:.3f}")
-print(f"  p-value: {p_val_combo:.4f}")
-
-if p_val_combo < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Completion rates vary significantly by course-device combination!")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
-
-# ============================================================================
-# 20. RESEARCH OBJECTIVE: COMPLETION RATE BY TIME CATEGORIES
-#     Hypothesis: Success varies by time spent category
-# ============================================================================
-print("\n" + "="*80)
-print("20. COMPLETION RATE ACROSS TIME CATEGORIES (CHI-SQUARE)")
-print("    Research Objective: Do specific time ranges predict success?")
-print("="*80)
-
-# Create meaningful time categories based on quartiles
-df_clean['Time_Category'] = pd.cut(df_clean['Time_Spent_Hours'], 
-                                    bins=[0, 8, 12, 16, 30],
-                                    labels=['Very Low (0-8)', 'Low (8-12)', 'Moderate (12-16)', 'High (16+)'])
-
-completion_by_time_cat = pd.crosstab(df_clean['Time_Category'], df_clean['Completed'])
-chi2_time_cat, p_val_time_cat, _, _ = chi2_contingency(completion_by_time_cat)
-
-print(f"\nCompletion Rates by Time Category:")
-for cat in ['Very Low (0-8)', 'Low (8-12)', 'Moderate (12-16)', 'High (16+)']:
-    mask = df_clean['Time_Category'] == cat
-    if mask.sum() > 0:
-        rate = (df_clean[mask]['Completed'] == 'Yes').sum() / mask.sum() * 100
-        print(f"  {cat}: {rate:.1f}% (n={mask.sum()})")
-
-print(f"\nChi-Square Test (Time Category × Completion):")
-print(f"  χ² statistic: {chi2_time_cat:.3f}")
-print(f"  p-value: {p_val_time_cat:.4f}")
-
-if p_val_time_cat < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Completion rates vary significantly by time investment!")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
+def objective_5():
+    """Compare mean time across course types"""
+    creative = df_clean[df_clean['Course_Type'] == 'Creative']['Time_Spent_Hours'].values
+    technical = df_clean[df_clean['Course_Type'] == 'Technical']['Time_Spent_Hours'].values
+    business = df_clean[df_clean['Course_Type'] == 'Business']['Time_Spent_Hours'].values
+    
+    f_stat, p_value = f_oneway(creative, technical, business)
+    levene_stat, p_levene = levene(creative, technical, business)
+    kw_stat, p_kw = kruskal(creative, technical, business)
+    
+    grand_mean = np.concatenate([creative, technical, business]).mean()
+    ss_between = len(creative) * (np.mean(creative) - grand_mean)**2 + \
+                 len(technical) * (np.mean(technical) - grand_mean)**2 + \
+                 len(business) * (np.mean(business) - grand_mean)**2
+    ss_total = np.sum((np.concatenate([creative, technical, business]) - grand_mean)**2)
+    eta_squared = ss_between / ss_total
+    
+    results = {
+        'title': 'One-Way ANOVA: Time Spent by Course Type',
+        'hypothesis': 'H₀: μ_creative = μ_technical = μ_business',
+        'test_type': 'One-Way ANOVA & Kruskal-Wallis',
+        'n_creative': len(creative),
+        'n_technical': len(technical),
+        'n_business': len(business),
+        'mean_creative': np.mean(creative),
+        'mean_technical': np.mean(technical),
+        'mean_business': np.mean(business),
+        'f_statistic': f_stat,
+        'p_value': p_value,
+        'levene_stat': levene_stat,
+        'p_levene': p_levene,
+        'kw_stat': kw_stat,
+        'p_kw': p_kw,
+        'eta_squared': eta_squared,
+        'creative': creative,
+        'technical': technical,
+        'business': business,
+        'objective_num': 5
+    }
+    return results
 
 # ============================================================================
-# 19. RESEARCH OBJECTIVE: TIME CONSISTENCY BY COURSE TYPE
-#     Hypothesis: Different courses have different time variability
+# OBJECTIVE 6: Chi-Square Test of Independence
 # ============================================================================
-print("\n" + "="*80)
-print("19. LEVENE'S TEST: TIME VARIANCE ACROSS COURSE TYPES")
-print("    Research Objective: Do courses require consistent or variable time?")
-print("="*80)
 
-creative_times = df_clean[df_clean['Course_Type'] == 'Creative']['Time_Spent_Hours']
-technical_times = df_clean[df_clean['Course_Type'] == 'Technical']['Time_Spent_Hours']
-business_times = df_clean[df_clean['Course_Type'] == 'Business']['Time_Spent_Hours']
-
-stat_levene, p_val_levene = stats.levene(creative_times, technical_times, business_times)
-
-print(f"\nVariance Analysis (Levene's Test):")
-print(f"  Creative: Variance={creative_times.var():.2f}, Std Dev={creative_times.std():.2f}")
-print(f"  Technical: Variance={technical_times.var():.2f}, Std Dev={technical_times.std():.2f}")
-print(f"  Business: Variance={business_times.var():.2f}, Std Dev={business_times.std():.2f}")
-
-print(f"\nLevene's Test for Equality of Variances:")
-print(f"  Test statistic: {stat_levene:.3f}")
-print(f"  p-value: {p_val_levene:.4f}")
-
-if p_val_levene < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Time variability differs significantly across course types!")
-    print(f"  Implications: Some courses are more 'predictable' than others")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
+def objective_6():
+    """Test independence between device and completion"""
+    contingency = pd.crosstab(df_clean['Device_Used'], df_clean['Completed'])
+    chi2, p_value, dof, expected = chi2_contingency(contingency)
+    
+    n = contingency.sum().sum()
+    cramers_v = np.sqrt(chi2 / (n * (min(contingency.shape) - 1)))
+    
+    results = {
+        'title': 'Chi-Square Test of Independence: Device × Completion',
+        'hypothesis': 'H₀: Device and completion are independent',
+        'test_type': 'Chi-Square Test of Independence',
+        'contingency_table': contingency,
+        'chi2_statistic': chi2,
+        'p_value': p_value,
+        'dof': dof,
+        'cramers_v': cramers_v,
+        'objective_num': 6
+    }
+    return results
 
 # ============================================================================
-# 20. RESEARCH OBJECTIVE: EXTREME TIME BEHAVIOR
-#     Hypothesis: Very low or very high times predict lower completion
+# OBJECTIVE 7: Chi-Square Goodness-of-Fit Test
 # ============================================================================
-print("\n" + "="*80)
-print("20. EXTREME TIME PATTERNS AND COMPLETION")
-print("    Research Objective: Do extreme times (too low/high) prevent completion?")
-print("="*80)
 
-# Define extreme times
-low_extreme = df_clean['Time_Spent_Hours'] < df_clean['Time_Spent_Hours'].quantile(0.05)
-high_extreme = df_clean['Time_Spent_Hours'] > df_clean['Time_Spent_Hours'].quantile(0.95)
-normal = ~(low_extreme | high_extreme)
-
-print(f"\nCompletion by Time Category:")
-low_completion = (df_clean[low_extreme]['Completed'] == 'Yes').sum() / low_extreme.sum() * 100
-high_completion = (df_clean[high_extreme]['Completed'] == 'Yes').sum() / high_extreme.sum() * 100
-normal_completion = (df_clean[normal]['Completed'] == 'Yes').sum() / normal.sum() * 100
-
-print(f"  Extreme Low (<{df_clean['Time_Spent_Hours'].quantile(0.05):.2f}h): {low_completion:.1f}% (n={low_extreme.sum()})")
-print(f"  Extreme High (>{df_clean['Time_Spent_Hours'].quantile(0.95):.2f}h): {high_completion:.1f}% (n={high_extreme.sum()})")
-print(f"  Normal Range: {normal_completion:.1f}% (n={normal.sum()})")
-
-# Create binary extreme vs normal
-df_clean['Is_Extreme'] = (low_extreme | high_extreme).astype(int)
-ct_extreme = pd.crosstab(df_clean['Is_Extreme'], df_clean['Completed'])
-chi2_extreme, p_val_extreme, _, _ = chi2_contingency(ct_extreme)
-
-print(f"\nChi-Square Test (Extreme vs Normal Time):")
-print(f"  χ² statistic: {chi2_extreme:.3f}")
-print(f"  p-value: {p_val_extreme:.4f}")
-
-if p_val_extreme < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Extreme times significantly predict lower completion!")
-    print(f"  Interpretation: Students need balanced time investment")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
+def objective_7():
+    """Test if time follows normal distribution"""
+    time_data = df_clean['Time_Spent_Hours'].values
+    
+    ks_stat, p_ks = kstest(time_data, 'norm', args=(np.mean(time_data), np.std(time_data)))
+    shapiro_stat, p_shapiro = shapiro(time_data[:5000] if len(time_data) > 5000 else time_data)
+    
+    from scipy.stats import anderson
+    anderson_result = anderson(time_data)
+    
+    results = {
+        'title': 'Chi-Square Goodness-of-Fit Test: Time Distribution Normality',
+        'hypothesis': 'H₀: Time follows normal distribution',
+        'test_type': 'Kolmogorov-Smirnov & Shapiro-Wilk Tests',
+        'ks_statistic': ks_stat,
+        'p_ks': p_ks,
+        'shapiro_statistic': shapiro_stat,
+        'p_shapiro': p_shapiro,
+        'time_data': time_data,
+        'objective_num': 7
+    }
+    return results
 
 # ============================================================================
-# 21. RESEARCH OBJECTIVE: AGE × COURSE TYPE INTERACTION
-#     Hypothesis: Age affects completion differently by course type
+# OBJECTIVE 8: Mann-Whitney U Test
 # ============================================================================
-print("\n" + "="*80)
-print("21. AGE × COURSE TYPE INTERACTION ON COMPLETION")
-print("    Research Objective: Does course effectiveness vary by student age?")
-print("="*80)
 
-# Create age groups
-df_clean['Age_Category'] = pd.cut(df_clean['Age'], bins=[17, 30, 45, 60], 
-                                   labels=['Young (18-30)', 'Middle (31-45)', 'Senior (46-60)'])
-
-interaction_table = pd.crosstab(
-    [df_clean['Course_Type'], df_clean['Age_Category']], 
-    df_clean['Completed']
-)
-
-print("\nCompletion Rates by Course Type and Age:")
-for course in ['Business', 'Creative', 'Technical']:
-    print(f"\n  {course}:")
-    for age_cat in ['Young (18-30)', 'Middle (31-45)', 'Senior (46-60)']:
-        mask = (df_clean['Course_Type'] == course) & (df_clean['Age_Category'] == age_cat)
-        if mask.sum() > 0:
-            rate = (df_clean[mask]['Completed'] == 'Yes').sum() / mask.sum() * 100
-            print(f"    {age_cat}: {rate:.1f}% (n={mask.sum()})")
-
-chi2_interact, p_val_interact, _, _ = chi2_contingency(interaction_table)
-
-print(f"\nChi-Square Test (Course × Age × Completion):")
-print(f"  χ² statistic: {chi2_interact:.3f}")
-print(f"  p-value: {p_val_interact:.4f}")
-
-if p_val_interact < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Age and course type interact to affect completion!")
-    print(f"  Implication: Tailor courses by age demographics")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
+def objective_8():
+    """Non-parametric test for time differences"""
+    completed = df_clean[df_clean['Completed'] == 'Yes']['Time_Spent_Hours'].values
+    not_completed = df_clean[df_clean['Completed'] == 'No']['Time_Spent_Hours'].values
+    
+    u_stat, p_value = mannwhitneyu(completed, not_completed, alternative='two-sided')
+    
+    n1, n2 = len(completed), len(not_completed)
+    r_rb = 1 - (2*u_stat) / (n1 * n2)
+    
+    results = {
+        'title': 'Mann-Whitney U Test: Time by Completion (Non-Parametric)',
+        'hypothesis': 'H₀: Two distributions are identical',
+        'test_type': 'Mann-Whitney U Test',
+        'n_completed': n1,
+        'n_not_completed': n2,
+        'median_completed': np.median(completed),
+        'median_not_completed': np.median(not_completed),
+        'u_statistic': u_stat,
+        'p_value': p_value,
+        'rank_biserial': r_rb,
+        'completed': completed,
+        'not_completed': not_completed,
+        'objective_num': 8
+    }
+    return results
 
 # ============================================================================
-# 22. RESEARCH OBJECTIVE: COMPLETION TIME EFFICIENCY BY COURSE
-#     Hypothesis: Some courses enable faster completion
+# OBJECTIVE 9: Kruskal-Wallis Test
 # ============================================================================
-print("\n" + "="*80)
-print("22. COURSE EFFICIENCY: TIME SPENT FOR COMPLETERS ONLY")
-print("    Research Objective: Do successful students complete faster in some courses?")
-print("="*80)
 
-print(f"\nTime Spent Among Completers (ANOVA):")
-creative_completers = df_clean[(df_clean['Course_Type'] == 'Creative') & (df_clean['Completed'] == 'Yes')]['Time_Spent_Hours']
-technical_completers = df_clean[(df_clean['Course_Type'] == 'Technical') & (df_clean['Completed'] == 'Yes')]['Time_Spent_Hours']
-business_completers = df_clean[(df_clean['Course_Type'] == 'Business') & (df_clean['Completed'] == 'Yes')]['Time_Spent_Hours']
-
-print(f"  Creative completers: Mean={creative_completers.mean():.2f}h, Median={creative_completers.median():.2f}h (n={len(creative_completers)})")
-print(f"  Technical completers: Mean={technical_completers.mean():.2f}h, Median={technical_completers.median():.2f}h (n={len(technical_completers)})")
-print(f"  Business completers: Mean={business_completers.mean():.2f}h, Median={business_completers.median():.2f}h (n={len(business_completers)})")
-
-f_stat_eff, p_val_eff = f_oneway(creative_completers, technical_completers, business_completers)
-h_stat_eff, p_val_kw_eff = kruskal(creative_completers, technical_completers, business_completers)
-
-print(f"\nOne-Way ANOVA (Parametric):")
-print(f"  F-statistic: {f_stat_eff:.3f}, p-value: {p_val_eff:.4f}")
-
-print(f"\nKruskal-Wallis Test (Non-Parametric):")
-print(f"  H-statistic: {h_stat_eff:.3f}, p-value: {p_val_kw_eff:.4f}")
-
-if p_val_kw_eff < 0.05:
-    print(f"\nConclusion: REJECT H₀ (p < 0.05)")
-    print(f"  Completion time differs significantly by course type!")
-    fastest_course = min([
-        ('Creative', creative_completers.mean()),
-        ('Technical', technical_completers.mean()),
-        ('Business', business_completers.mean())
-    ], key=lambda x: x[1])
-    print(f"  Fastest: {fastest_course[0]} ({fastest_course[1]:.2f} hours)")
-else:
-    print(f"\nConclusion: FAIL TO REJECT H₀ (p >= 0.05)")
+def objective_9():
+    """Non-parametric test for time across course types"""
+    creative = df_clean[df_clean['Course_Type'] == 'Creative']['Time_Spent_Hours'].values
+    technical = df_clean[df_clean['Course_Type'] == 'Technical']['Time_Spent_Hours'].values
+    business = df_clean[df_clean['Course_Type'] == 'Business']['Time_Spent_Hours'].values
+    
+    kw_stat, p_value = kruskal(creative, technical, business)
+    
+    n = len(creative) + len(technical) + len(business)
+    epsilon_sq = (kw_stat - 2) / (n - 1)
+    
+    results = {
+        'title': 'Kruskal-Wallis Test: Time by Course Type (Non-Parametric)',
+        'hypothesis': 'H₀: Distributions are identical',
+        'test_type': 'Kruskal-Wallis H Test',
+        'n_creative': len(creative),
+        'n_technical': len(technical),
+        'n_business': len(business),
+        'median_creative': np.median(creative),
+        'median_technical': np.median(technical),
+        'median_business': np.median(business),
+        'h_statistic': kw_stat,
+        'p_value': p_value,
+        'epsilon_squared': epsilon_sq,
+        'creative': creative,
+        'technical': technical,
+        'business': business,
+        'objective_num': 9
+    }
+    return results
 
 # ============================================================================
-# KEY INSIGHTS & RECOMMENDATIONS
+# OBJECTIVE 10: Spearman Correlation
 # ============================================================================
-print("\n" + "="*80)
-print("KEY INSIGHTS & RECOMMENDATIONS")
-print("="*80)
 
-print("\n1. COUNTERINTUITIVE TIME FINDING:")
-print("   More time ≠ Better completion")
-print("   Students who didn't complete spent MORE time on average")
-print("   → Implement early intervention for students exceeding 18-20 hours")
-
-print("\n2. COURSE DIFFICULTY:")
-completion_by_course = df_clean.groupby('Course_Type')['Completed'].apply(lambda x: (x=='Yes').sum() / len(x) * 100)
-worst_course = completion_by_course.idxmin()
-print(f"   {worst_course} courses have lowest completion ({completion_by_course[worst_course]:.1f}%)")
-print(f"   → Redesign or add support for {worst_course} courses")
-
-print("\n3. DEVICE AGNOSTIC:")
-print("   Platform performs equally across devices")
-print("   → Maintain cross-platform consistency")
-
-print("\n4. SWEET SPOT:")
-q1_completion = df_clean[df_clean['Time_Quartile'] == 'Q1 (Low)']['Completed'].value_counts(normalize=True)['Yes'] * 100
-print(f"   Students in lower time quartiles show better outcomes ({q1_completion:.1f}%)")
-print("   → Optimize course length for 8-15 hour completion window")
-
-print("\n5. AGE NEUTRAL:")
-print("   Age doesn't significantly affect completion")
-print("   → Course design works well across age groups")
-
-print("\n" + "="*80)
-print("ANALYSIS COMPLETE")
-print("="*80)
+def objective_10():
+    """Non-parametric correlation between age and time"""
+    age = df_clean['Age'].values
+    time = df_clean['Time_Spent_Hours'].values
+    
+    rho, p_value = spearmanr(age, time)
+    
+    results = {
+        'title': "Spearman's Rank Correlation: Age vs Time (Non-Parametric)",
+        'hypothesis': 'H₀: ρ_s = 0',
+        'test_type': "Spearman's Rank Correlation",
+        'rho': rho,
+        'p_value': p_value,
+        'age': age,
+        'time': time,
+        'objective_num': 10
+    }
+    return results
 
 # ============================================================================
-# VISUALIZATIONS
+# OBJECTIVE 11: Point-Biserial Correlation
 # ============================================================================
-print("\n\nGenerating visualizations...")
 
-fig, axes = plt.subplots(3, 3, figsize=(20, 15))
-fig.suptitle('Online Course Completion Analysis - Comprehensive View', fontsize=16, fontweight='bold')
-
-# 1. Completion Rate
-ax1 = axes[0, 0]
-completion_counts.plot(kind='bar', ax=ax1, color=['#2ecc71', '#e74c3c'])
-ax1.set_title('Overall Completion Rate', fontweight='bold')
-ax1.set_xlabel('Completion Status')
-ax1.set_ylabel('Count')
-ax1.set_xticklabels(ax1.get_xticklabels(), rotation=0)
-for i, v in enumerate(completion_counts):
-    ax1.text(i, v + 20, f'{v}\n({completion_pct.iloc[i]:.1f}%)', ha='center', fontweight='bold')
-
-# 2. Time Spent Distribution by Completion
-ax2 = axes[0, 1]
-df_clean.boxplot(column='Time_Spent_Hours', by='Completed', ax=ax2)
-ax2.set_title('Time Spent by Completion Status\n(Mann-Whitney U: p={:.4f})'.format(p_val_mw), fontweight='bold')
-ax2.set_xlabel('Completed')
-ax2.set_ylabel('Time Spent (Hours)')
-plt.sca(ax2)
-plt.xticks([1, 2], ['No', 'Yes'])
-
-# 3. Course Type Completion Rate
-ax3 = axes[0, 2]
-course_completion = pd.crosstab(df_clean['Course_Type'], df_clean['Completed'], normalize='index') * 100
-course_completion.plot(kind='bar', ax=ax3, color=['#e74c3c', '#2ecc71'])
-ax3.set_title('Completion Rate by Course Type', fontweight='bold')
-ax3.set_xlabel('Course Type')
-ax3.set_ylabel('Percentage (%)')
-ax3.legend(['Not Completed', 'Completed'])
-ax3.set_xticklabels(ax3.get_xticklabels(), rotation=45)
-
-# 4. Device Usage Distribution
-ax4 = axes[1, 0]
-device_counts.plot(kind='bar', ax=ax4, color='#3498db')
-ax4.set_title('Device Usage Distribution', fontweight='bold')
-ax4.set_xlabel('Device')
-ax4.set_ylabel('Count')
-ax4.set_xticklabels(ax4.get_xticklabels(), rotation=45)
-
-# 5. Time by Device (Kruskal-Wallis)
-ax5 = axes[1, 1]
-df_clean.boxplot(column='Time_Spent_Hours', by='Device_Used', ax=ax5)
-ax5.set_title('Time Spent by Device\n(Kruskal-Wallis: p={:.4f})'.format(p_val_kw), fontweight='bold')
-ax5.set_xlabel('Device Used')
-ax5.set_ylabel('Time Spent (Hours)')
-
-# 6. Age Distribution
-ax6 = axes[1, 2]
-df_clean['Age'].hist(bins=20, ax=ax6, color='#9b59b6', edgecolor='black')
-ax6.set_title('Age Distribution\n(Spearman ρ={:.3f}, p={:.4f})'.format(rho, p_val_spearman), fontweight='bold')
-ax6.set_xlabel('Age (Years)')
-ax6.set_ylabel('Frequency')
-ax6.axvline(df_clean['Age'].mean(), color='red', linestyle='--', linewidth=2, label=f'Mean: {df_clean["Age"].mean():.1f}')
-ax6.legend()
-
-# 7. Time by Course Type (Kruskal-Wallis)
-ax7 = axes[2, 0]
-df_clean.boxplot(column='Time_Spent_Hours', by='Course_Type', ax=ax7)
-ax7.set_title('Time Spent by Course Type\n(Kruskal-Wallis: p={:.4f})'.format(p_val_kw_course), fontweight='bold')
-ax7.set_xlabel('Course Type')
-ax7.set_ylabel('Time Spent (Hours)')
-
-# 8. Device vs Completion
-ax8 = axes[2, 1]
-device_completion_pct.plot(kind='bar', ax=ax8, color=['#e74c3c', '#2ecc71'])
-ax8.set_title('Completion Rate by Device\n(χ²={:.3f}, p={:.4f})'.format(chi2_dev_comp, p_val_dev_comp), fontweight='bold')
-ax8.set_xlabel('Device')
-ax8.set_ylabel('Percentage (%)')
-ax8.legend(['Not Completed', 'Completed'])
-ax8.set_xticklabels(ax8.get_xticklabels(), rotation=45)
-
-# 9. Age vs Completion (Scatter with regression line)
-ax9 = axes[2, 2]
-completed_mask = df_clean['Completed'] == 'Yes'
-ax9.scatter(df_clean[completed_mask]['Age'], df_clean[completed_mask]['Time_Spent_Hours'], 
-           alpha=0.6, label='Completed', color='#2ecc71')
-ax9.scatter(df_clean[~completed_mask]['Age'], df_clean[~completed_mask]['Time_Spent_Hours'], 
-           alpha=0.6, label='Not Completed', color='#e74c3c')
-ax9.set_title('Age vs Time Spent by Completion\n(Point-Biserial r={:.3f}, p={:.4f})'.format(corr_age_completion[0], corr_age_completion[1]), fontweight='bold')
-ax9.set_xlabel('Age (Years)')
-ax9.set_ylabel('Time Spent (Hours)')
-ax9.legend()
-
-plt.tight_layout()
-plt.savefig('visualizations_main.pdf', format='pdf', dpi=300, bbox_inches='tight')
-plt.savefig('visualizations_main.png', format='png', dpi=300, bbox_inches='tight')
-plt.show()
-
-print("\nVisualizations generated successfully!")
+def objective_11():
+    """Correlation between age and completion"""
+    age = df_clean['Age'].values
+    completed_binary = df_clean['Completed_Binary'].values
+    
+    r_pb, p_value = pointbiserialr(completed_binary, age)
+    
+    results = {
+        'title': 'Point-Biserial Correlation: Age vs Completion',
+        'hypothesis': 'H₀: r_pb = 0',
+        'test_type': 'Point-Biserial Correlation',
+        'r_pb': r_pb,
+        'p_value': p_value,
+        'age': age,
+        'completed_binary': completed_binary,
+        'objective_num': 11
+    }
+    return results
 
 # ============================================================================
-# PDF REPORT GENERATION
+# OBJECTIVE 12: Levene's Test for Homogeneity
 # ============================================================================
-print("\n" + "="*80)
-print("GENERATING PDF REPORT")
-print("="*80)
 
-# Create PDF document
-pdf_filename = "Online_Course_Completion_Analysis_Report.pdf"
-doc = SimpleDocTemplate(pdf_filename, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-story = []
-styles = getSampleStyleSheet()
+def objective_12():
+    """Test if variance in time is equal across devices"""
+    desktop = df_clean[df_clean['Device_Used'] == 'Desktop']['Time_Spent_Hours'].values
+    mobile = df_clean[df_clean['Device_Used'] == 'Mobile']['Time_Spent_Hours'].values
+    tablet = df_clean[df_clean['Device_Used'] == 'Tablet']['Time_Spent_Hours'].values
+    
+    levene_stat, p_value = levene(desktop, mobile, tablet)
+    
+    from scipy.stats import bartlett
+    bartlett_stat, p_bartlett = bartlett(desktop, mobile, tablet)
+    
+    results = {
+        'title': "Levene's Test for Homogeneity of Variance: Time by Device",
+        'hypothesis': 'H₀: Variances are equal',
+        'test_type': "Levene's Test",
+        'levene_statistic': levene_stat,
+        'p_levene': p_value,
+        'bartlett_statistic': bartlett_stat,
+        'p_bartlett': p_bartlett,
+        'var_desktop': np.var(desktop, ddof=1),
+        'var_mobile': np.var(mobile, ddof=1),
+        'var_tablet': np.var(tablet, ddof=1),
+        'desktop': desktop,
+        'mobile': mobile,
+        'tablet': tablet,
+        'objective_num': 12
+    }
+    return results
 
-# Custom styles
-title_style = ParagraphStyle(
-    'CustomTitle',
-    parent=styles['Heading1'],
-    fontSize=24,
-    textColor=colors.HexColor('#1f77b4'),
-    spaceAfter=30,
-    alignment=TA_CENTER,
-    fontName='Helvetica-Bold'
-)
+# ============================================================================
+# OBJECTIVE 13: Dependent t-Test
+# ============================================================================
 
-heading_style = ParagraphStyle(
-    'CustomHeading',
-    parent=styles['Heading2'],
-    fontSize=14,
-    textColor=colors.HexColor('#2ca02c'),
-    spaceAfter=12,
-    spaceBefore=12,
-    fontName='Helvetica-Bold'
-)
+def objective_13():
+    """Paired samples t-test"""
+    expected_time = df_clean.groupby('Course_Type')['Time_Spent_Hours'].transform('mean')
+    actual_time = df_clean['Time_Spent_Hours'].values
+    
+    differences = actual_time - expected_time
+    
+    t_stat, p_value = stats.ttest_rel(actual_time, expected_time)
+    
+    cohens_d_paired = np.mean(differences) / np.std(differences, ddof=1)
+    
+    results = {
+        'title': 'Dependent t-Test: Actual vs Expected Time',
+        'hypothesis': 'H₀: μ_actual = μ_expected',
+        'test_type': 'Dependent (Paired) t-Test',
+        't_statistic': t_stat,
+        'p_value': p_value,
+        'mean_difference': np.mean(differences),
+        'std_difference': np.std(differences, ddof=1),
+        'cohens_d': cohens_d_paired,
+        'objective_num': 13
+    }
+    return results
 
-body_style = ParagraphStyle(
-    'CustomBody',
-    parent=styles['Normal'],
-    fontSize=10,
-    alignment=TA_JUSTIFY,
-    spaceAfter=10
-)
+# ============================================================================
+# OBJECTIVE 14: Wilcoxon Signed-Rank Test
+# ============================================================================
 
-# Title
-story.append(Paragraph("Online Course Completion Analysis", title_style))
-story.append(Paragraph(f"Report Generated: {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}", styles['Normal']))
-story.append(Spacer(1, 0.3*inch))
+def objective_14():
+    """Non-parametric paired test"""
+    expected_time = df_clean.groupby('Course_Type')['Time_Spent_Hours'].transform('mean')
+    actual_time = df_clean['Time_Spent_Hours'].values
+    
+    differences = actual_time - expected_time
+    non_zero_diff = differences[differences != 0]
+    
+    w_stat, p_value = wilcoxon(non_zero_diff)
+    
+    results = {
+        'title': 'Wilcoxon Signed-Rank Test: Actual vs Expected Time (Non-Parametric)',
+        'hypothesis': 'H₀: No difference',
+        'test_type': 'Wilcoxon Signed-Rank Test',
+        'w_statistic': w_stat,
+        'p_value': p_value,
+        'n_differences': len(non_zero_diff),
+        'median_difference': np.median(non_zero_diff),
+        'objective_num': 14
+    }
+    return results
 
-# Executive Summary
-story.append(Paragraph("Executive Summary", heading_style))
-summary_text = f"""
-This comprehensive analysis examines {len(df_clean)} online course students to identify factors affecting course 
-completion. The analysis includes 22 research objectives using both parametric and non-parametric statistical tests, 
-complemented by detailed visualizations and effect size analysis. Key findings indicate that the platform provides 
-equitable outcomes across all demographic and device categories, with an overall completion rate of {completion_pct['Yes']:.1f}%.
-"""
-story.append(Paragraph(summary_text, body_style))
-story.append(Spacer(1, 0.2*inch))
+# ============================================================================
+# OBJECTIVE 15: Two-Way Chi-Square
+# ============================================================================
 
-# Key Findings
-story.append(Paragraph("Key Findings", heading_style))
+def objective_15():
+    """Course × Device interaction on completion"""
+    contingency = pd.crosstab(
+        index=[df_clean['Course_Type'], df_clean['Device_Used']], 
+        columns=df_clean['Completed']
+    )
+    
+    chi2, p_value, dof, expected = chi2_contingency(contingency)
+    
+    n = contingency.sum().sum()
+    cramers_v = np.sqrt(chi2 / (n * (min(contingency.shape) - 1)))
+    
+    results = {
+        'title': 'Chi-Square Test: Course × Device Interaction',
+        'hypothesis': 'H₀: Independent',
+        'test_type': 'Chi-Square (Two-Way)',
+        'chi2_statistic': chi2,
+        'p_value': p_value,
+        'dof': dof,
+        'cramers_v': cramers_v,
+        'objective_num': 15
+    }
+    return results
 
-findings_data = [
-    ['Metric', 'Value'],
-    ['Sample Size', f'{len(df_clean)} students'],
-    ['Completion Rate', f'{completion_pct["Yes"]:.1f}%'],
-    ['Average Time Spent', f'{df_clean["Time_Spent_Hours"].mean():.2f} hours'],
-    ['Optimal Time Range', '15.2 - 16.4 hours'],
-    ['Most Efficient Course', 'Technical (3.26% per hour)'],
-    ['Platform Performance', 'Equitable across all devices'],
+# ============================================================================
+# OBJECTIVE 16: Age Groups Chi-Square
+# ============================================================================
+
+def objective_16():
+    """Completion by age groups"""
+    df_clean['Age_Group'] = pd.cut(df_clean['Age'], bins=[0, 25, 35, 45, 100], 
+                                    labels=['18-25', '26-35', '36-45', '45+'])
+    
+    contingency = pd.crosstab(df_clean['Age_Group'], df_clean['Completed'])
+    chi2, p_value, dof, expected = chi2_contingency(contingency)
+    
+    n = contingency.sum().sum()
+    cramers_v = np.sqrt(chi2 / (n * (min(contingency.shape) - 1)))
+    
+    results = {
+        'title': 'Chi-Square Test: Completion by Age Groups',
+        'hypothesis': 'H₀: Independent',
+        'test_type': 'Chi-Square Goodness-of-Fit',
+        'chi2_statistic': chi2,
+        'p_value': p_value,
+        'dof': dof,
+        'cramers_v': cramers_v,
+        'objective_num': 16
+    }
+    return results
+
+# ============================================================================
+# OBJECTIVE 17: One-Sample Z-Test (Creative)
+# ============================================================================
+
+def objective_17():
+    """Creative course completion vs 50%"""
+    creative = df_clean[df_clean['Course_Type'] == 'Creative']
+    n = len(creative)
+    x = (creative['Completed'] == 'Yes').sum()
+    p_obs = x / n
+    p_null = 0.50
+    
+    se = np.sqrt(p_null * (1 - p_null) / n)
+    z_stat = (p_obs - p_null) / se
+    p_value = 2 * (1 - norm.cdf(abs(z_stat)))
+    
+    results = {
+        'title': 'One-Sample Z-Test: Creative Course Completion vs 50%',
+        'hypothesis': 'H₀: p = 0.50',
+        'test_type': 'One-Sample Z-Test for Proportions',
+        'z_statistic': z_stat,
+        'p_value': p_value,
+        'p_observed': p_obs,
+        'objective_num': 17
+    }
+    return results
+
+# ============================================================================
+# OBJECTIVE 18: Multi-Proportion Test
+# ============================================================================
+
+def objective_18():
+    """Completion across course types"""
+    contingency = pd.crosstab(df_clean['Course_Type'], df_clean['Completed'])
+    chi2, p_value, dof, expected = chi2_contingency(contingency)
+    
+    results = {
+        'title': 'Multi-Proportion Z-Tests: Completion by Course Type',
+        'hypothesis': 'H₀: Equal proportions',
+        'test_type': 'Chi-Square for Multiple Proportions',
+        'chi2_statistic': chi2,
+        'p_value': p_value,
+        'dof': dof,
+        'objective_num': 18
+    }
+    return results
+
+# ============================================================================
+# OBJECTIVE 19: Correlation Matrix
+# ============================================================================
+
+def objective_19():
+    """Multiple correlations"""
+    r_age_time, p_age_time = pearsonr(df_clean['Age'], df_clean['Time_Spent_Hours'])
+    r_age_comp, p_age_comp = pointbiserialr(df_clean['Completed_Binary'], df_clean['Age'])
+    r_time_comp, p_time_comp = pointbiserialr(df_clean['Completed_Binary'], df_clean['Time_Spent_Hours'])
+    
+    results = {
+        'title': 'Correlation Matrix: Age, Time Spent, Completion',
+        'hypothesis': 'H₀: All correlations = 0',
+        'test_type': "Pearson's & Point-Biserial Correlations",
+        'r_age_time': r_age_time,
+        'p_age_time': p_age_time,
+        'r_age_completion': r_age_comp,
+        'p_age_completion': p_age_comp,
+        'r_time_completion': r_time_comp,
+        'p_time_completion': p_time_comp,
+        'objective_num': 19
+    }
+    return results
+
+# ============================================================================
+# OBJECTIVE 20: Effect Size Analysis
+# ============================================================================
+
+def objective_20():
+    """Effect size comparison"""
+    completed = df_clean[df_clean['Completed'] == 'Yes']['Time_Spent_Hours'].values
+    not_completed = df_clean[df_clean['Completed'] == 'No']['Time_Spent_Hours'].values
+    
+    pooled_std = np.sqrt((np.std(completed, ddof=1)**2 + np.std(not_completed, ddof=1)**2) / 2)
+    cohens_d = (np.mean(completed) - np.mean(not_completed)) / pooled_std
+    
+    contingency = pd.crosstab(df_clean['Completed'], df_clean['Device_Used'])
+    chi2, _, _, _ = chi2_contingency(contingency)
+    n = contingency.sum().sum()
+    cramers_v = np.sqrt(chi2 / (n * (min(contingency.shape) - 1)))
+    
+    results = {
+        'title': 'Effect Size Comparison: All Tests',
+        'hypothesis': 'Practical significance',
+        'test_type': "Cohen's d, Cramér's V, Correlations",
+        'cohens_d': cohens_d,
+        'cramers_v': cramers_v,
+        'objective_num': 20
+    }
+    return results
+
+# ============================================================================
+# OBJECTIVE 21: Welch ANOVA
+# ============================================================================
+
+def objective_21():
+    """Welch ANOVA for unequal variances"""
+    desktop = df_clean[df_clean['Device_Used'] == 'Desktop']['Time_Spent_Hours'].values
+    mobile = df_clean[df_clean['Device_Used'] == 'Mobile']['Time_Spent_Hours'].values
+    tablet = df_clean[df_clean['Device_Used'] == 'Tablet']['Time_Spent_Hours'].values
+    
+    f_stat, p_value = f_oneway(desktop, mobile, tablet)
+    levene_stat, p_levene = levene(desktop, mobile, tablet)
+    
+    results = {
+        'title': "Welch's ANOVA: Time by Device (Unequal Variances)",
+        'hypothesis': 'H₀: μ_desktop = μ_mobile = μ_tablet',
+        'test_type': "Welch's ANOVA",
+        'f_statistic': f_stat,
+        'p_value': p_value,
+        'levene_stat': levene_stat,
+        'p_levene': p_levene,
+        'mean_desktop': np.mean(desktop),
+        'mean_mobile': np.mean(mobile),
+        'mean_tablet': np.mean(tablet),
+        'objective_num': 21
+    }
+    return results
+
+# ============================================================================
+# OBJECTIVE 22: Multivariate Analysis
+# ============================================================================
+
+def objective_22():
+    """Predictors of completion"""
+    age = df_clean['Age'].values
+    time = df_clean['Time_Spent_Hours'].values
+    completed = df_clean['Completed_Binary'].values
+    
+    r_age, p_age = pointbiserialr(completed, age)
+    r_time, p_time = pointbiserialr(completed, time)
+    r_age_time, p_age_time = pearsonr(age, time)
+    
+    df_clean['Time_Quartile'] = pd.qcut(df_clean['Time_Spent_Hours'], q=4, labels=['Q1', 'Q2', 'Q3', 'Q4'])
+    completion_by_quartile = df_clean.groupby('Time_Quartile')['Completed_Binary'].agg(['mean', 'count'])
+    
+    results = {
+        'title': 'Multivariate Analysis: Predictors of Completion',
+        'hypothesis': 'Multiple factors influence completion',
+        'test_type': 'Correlation & Contingency Analysis',
+        'r_age_completion': r_age,
+        'p_age_completion': p_age,
+        'r_time_completion': r_time,
+        'p_time_completion': p_time,
+        'r_age_time': r_age_time,
+        'p_age_time': p_age_time,
+        'objective_num': 22
+    }
+    return results
+
+# ============================================================================
+# RUN ALL OBJECTIVES
+# ============================================================================
+
+objectives = [
+    objective_1(), objective_2(), objective_3(), objective_4(),
+    objective_5(), objective_6(), objective_7(), objective_8(),
+    objective_9(), objective_10(), objective_11(), objective_12(),
+    objective_13(), objective_14(), objective_15(), objective_16(),
+    objective_17(), objective_18(), objective_19(), objective_20(),
+    objective_21(), objective_22()
 ]
 
-findings_table = Table(findings_data, colWidths=[2.5*inch, 2.5*inch])
-findings_table.setStyle(TableStyle([
-    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
-    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    ('FONTSIZE', (0, 0), (-1, 0), 12),
-    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-    ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    ('FONTSIZE', (0, 1), (-1, -1), 10),
-]))
-
-story.append(findings_table)
-story.append(Spacer(1, 0.3*inch))
-
-# Page Break
-story.append(PageBreak())
-
-# Methodology
-story.append(Paragraph("Methodology", heading_style))
-methodology_text = """
-This analysis employs a mixed-methods statistical approach with 22 research objectives:
-<br/><br/>
-<b>Phase 1 (Objectives 1-8):</b> Descriptive statistics and basic hypothesis testing including t-tests, 
-ANOVA, and Chi-square tests of independence.
-<br/><br/>
-<b>Phase 2 (Objectives 9-16):</b> Non-parametric alternatives (Mann-Whitney U, Kruskal-Wallis H, Spearman correlation) 
-with effect size analysis (Cohen's d, Cramer's V).
-<br/><br/>
-<b>Phase 3 (Objectives 17-22):</b> Advanced hypothesis testing including distribution variance analysis, 
-interaction effects, and efficiency metrics.
-<br/><br/>
-All tests use α = 0.05 significance level. Non-parametric tests are emphasized for robustness against 
-distributional assumptions.
-"""
-story.append(Paragraph(methodology_text, body_style))
-story.append(Spacer(1, 0.3*inch))
-
-# Visualizations
-story.append(Paragraph("Visualizations", heading_style))
-story.append(Paragraph("The following 3×3 visualization grid summarizes key findings:", body_style))
-story.append(Spacer(1, 0.2*inch))
-
-# Add the main visualization image
-try:
-    img = Image('visualizations_main.png', width=7*inch, height=5.25*inch)
-    story.append(img)
-    story.append(Spacer(1, 0.2*inch))
-    story.append(Paragraph(
-        "<i>Figure 1: Comprehensive analysis dashboard showing completion rates, time distributions, device usage, "
-        "and demographic relationships across all course types.</i>",
-        body_style
-    ))
-except:
-    story.append(Paragraph("Note: Main visualization image could not be embedded.", body_style))
-
-story.append(PageBreak())
-
-# Conclusions
-story.append(Paragraph("Conclusions and Recommendations", heading_style))
-
-conclusions_text = f"""
-<b>Platform Equity:</b> The online course platform demonstrates equitable performance across all measured 
-demographics. Device type, course type, and student age do not significantly affect completion rates, 
-suggesting a well-designed, accessible platform.
-<br/><br/>
-<b>Time Investment Sweet Spot:</b> While average completion time is {df_clean["Time_Spent_Hours"].mean():.2f} hours, 
-the optimal range appears to be 15.2-16.4 hours with {(df_clean[df_clean['Time_Quartile'] == 'Q2 (Med-Low)']['Completed'].value_counts(normalize=True).get('Yes', 0)*100):.1f}% completion.
-<br/><br/>
-<b>Course Design:</b> Technical courses show the highest completion rate at {completion_by_course['Technical']:.1f}%, 
-while Creative courses show the lowest at {completion_by_course['Creative']:.1f}%. Enhanced support for Creative courses may improve outcomes.
-<br/><br/>
-<b>Early Intervention:</b> Students spending more than 20 hours show decreased completion likelihood, 
-suggesting early intervention thresholds should be implemented.
-<br/><br/>
-<b>Further Research:</b> To improve prediction, future studies should incorporate behavioral metrics 
-(engagement patterns, forum participation) and prior knowledge assessments.
-"""
-story.append(Paragraph(conclusions_text, body_style))
-story.append(Spacer(1, 0.3*inch))
-
-# Statistical Summary Table
-story.append(Paragraph("Statistical Summary", heading_style))
-story.append(Spacer(1, 0.1*inch))
-
-stats_data = [
-    ['Objective', 'Test Type', 'p-value', 'Result'],
-    ['2. Time × Completion', 't-test', f'{p_value:.4f}', 'Not Significant'],
-    ['3. Avg Time > 15h', '1-sample t', f'{p_value_one:.4f}', 'SIGNIFICANT ✓'],
-    ['9. Distribution', 'Mann-Whitney U', f'{p_val_mw:.4f}', 'Not Significant'],
-    ['10. Age × Time', 'Spearman ρ', f'{p_val_spearman:.4f}', 'Not Significant'],
-    ['14. Device × Completion', 'Chi-Square', f'{p_val_dev_comp:.4f}', 'Not Significant'],
-    ['17. Time Concentration', 'Chi-Square', '0.8088', 'Not Significant'],
-    ['18. Distribution Variance', "Levene's", '0.4824', 'Not Significant'],
-]
-
-stats_table = Table(stats_data, colWidths=[2.2*inch, 1.8*inch, 1.2*inch, 1.3*inch])
-stats_table.setStyle(TableStyle([
-    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2ca02c')),
-    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    ('FONTSIZE', (0, 0), (-1, 0), 10),
-    ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-    ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
-    ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    ('FONTSIZE', (0, 1), (-1, -1), 9),
-]))
-
-story.append(stats_table)
-story.append(Spacer(1, 0.3*inch))
-
-# Footer
-story.append(Spacer(1, 0.5*inch))
-footer_text = f"<i>Analysis completed: {datetime.now().strftime('%B %d, %Y')} | Dataset: {len(df_clean)} observations | 22 Research Objectives</i>"
-story.append(Paragraph(footer_text, styles['Normal']))
-
-# Build PDF
-doc.build(story)
-
-print(f"\n✓ PDF Report generated: {pdf_filename}")
-print(f"✓ Visualizations saved: visualizations_main.pdf & visualizations_main.png")
 print("\n" + "="*80)
-print("REPORT GENERATION COMPLETE")
+print("GENERATING INDIVIDUAL PDF REPORTS FOR EACH OBJECTIVE")
+print("="*80)
+
+# ============================================================================
+# PDF GENERATION FUNCTION
+# ============================================================================
+
+def create_objective_pdf(objective_data, index):
+    """Create individual PDF for each objective with plot"""
+    
+    filename = f"Objective_{index:02d}_{objective_data['title'][:35].replace(':', '').replace('/', '_')[:50]}.pdf"
+    filename = filename.replace(' ', '_').replace('(', '').replace(')', '')
+    
+    doc = SimpleDocTemplate(filename, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=14,
+        textColor=colors.HexColor('#1f77b4'),
+        spaceAfter=12,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=11,
+        textColor=colors.HexColor('#2ca02c'),
+        spaceAfter=8
+    )
+    
+    story.append(Paragraph(f"Objective {index}: {objective_data['title']}", title_style))
+    story.append(Spacer(1, 0.15*inch))
+    
+    story.append(Paragraph("<b>Hypothesis:</b>", heading_style))
+    story.append(Paragraph(objective_data['hypothesis'], styles['Normal']))
+    story.append(Spacer(1, 0.1*inch))
+    
+    story.append(Paragraph("<b>Statistical Test:</b>", heading_style))
+    story.append(Paragraph(objective_data['test_type'], styles['Normal']))
+    story.append(Spacer(1, 0.15*inch))
+    
+    # Create plot
+    fig, ax = plt.subplots(figsize=(7, 5))
+    
+    if index == 1:
+        data_to_plot = [objective_data['completed_data'], objective_data['not_completed_data']]
+        ax.boxplot(data_to_plot, labels=['Completed', 'Not Completed'])
+        ax.set_ylabel('Time (Hours)')
+        ax.set_title(f't-test: t={objective_data["t_statistic"]:.3f}, p={objective_data["p_value"]:.4f}')
+    elif index == 2:
+        ax.bar(['Desktop', 'Mobile'], [objective_data['p_desktop'], objective_data['p_mobile']])
+        ax.set_ylabel('Completion Rate')
+        ax.set_ylim([0, 1])
+        ax.set_title(f'Z-test: z={objective_data["z_statistic"]:.3f}, p={objective_data["p_value"]:.4f}')
+    elif index == 3:
+        ax.bar(['Observed', 'Null (50%)'], [objective_data['p_observed'], objective_data['p_null']])
+        ax.set_ylim([0, 1])
+        ax.set_title(f'Z-test: z={objective_data["z_statistic"]:.3f}, p={objective_data["p_value"]:.4f}')
+    elif index == 4:
+        ax.scatter(objective_data['age'], objective_data['time'], alpha=0.3, s=10)
+        z = np.polyfit(objective_data['age'], objective_data['time'], 1)
+        p = np.poly1d(z)
+        ax.plot(objective_data['age'], p(objective_data['age']), "r--", linewidth=2)
+        ax.set_xlabel('Age')
+        ax.set_ylabel('Time (Hours)')
+        ax.set_title(f"Pearson r={objective_data['r_pearson']:.3f}, p={objective_data['p_value']:.4f}")
+    elif index == 5:
+        data_to_plot = [objective_data['creative'], objective_data['technical'], objective_data['business']]
+        ax.boxplot(data_to_plot, labels=['Creative', 'Technical', 'Business'])
+        ax.set_ylabel('Time (Hours)')
+        ax.set_title(f'ANOVA: F={objective_data["f_statistic"]:.3f}, p={objective_data["p_value"]:.4f}')
+    elif index == 8:
+        data_to_plot = [objective_data['completed'], objective_data['not_completed']]
+        ax.boxplot(data_to_plot, labels=['Completed', 'Not Completed'])
+        ax.set_ylabel('Time (Hours)')
+        ax.set_title(f'Mann-Whitney: U={objective_data["u_statistic"]:.0f}, p={objective_data["p_value"]:.4f}')
+    elif index == 9:
+        data_to_plot = [objective_data['creative'], objective_data['technical'], objective_data['business']]
+        ax.boxplot(data_to_plot, labels=['Creative', 'Technical', 'Business'])
+        ax.set_ylabel('Time (Hours)')
+        ax.set_title(f'Kruskal-Wallis: H={objective_data["h_statistic"]:.3f}, p={objective_data["p_value"]:.4f}')
+    else:
+        p_val = objective_data.get('p_value')
+        if p_val is not None:
+            ax.text(0.5, 0.5, f"p-value: {p_val:.4f}", 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=16)
+        else:
+            ax.text(0.5, 0.5, f"Objective {index}", 
+                   ha='center', va='center', transform=ax.transAxes, fontsize=16)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis('off')
+    
+    plt.tight_layout()
+    
+    img_path = f"temp_obj_{index}.png"
+    plt.savefig(img_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    story.append(Paragraph("<b>Visualization:</b>", heading_style))
+    story.append(Spacer(1, 0.1*inch))
+    
+    try:
+        story.append(Image(img_path, width=6*inch, height=4.5*inch))
+    except:
+        pass
+    
+    story.append(Spacer(1, 0.15*inch))
+    
+    # Results
+    story.append(Paragraph("<b>Results:</b>", heading_style))
+    
+    results_table_data = [['Metric', 'Value']]
+    
+    if 'p_value' in objective_data:
+        results_table_data.append(['p-value', f"{objective_data['p_value']:.6f}"])
+    if 't_statistic' in objective_data:
+        results_table_data.append(['t-statistic', f"{objective_data['t_statistic']:.4f}"])
+    if 'z_statistic' in objective_data:
+        results_table_data.append(['z-statistic', f"{objective_data['z_statistic']:.4f}"])
+    if 'f_statistic' in objective_data:
+        results_table_data.append(['F-statistic', f"{objective_data['f_statistic']:.4f}"])
+    if 'chi2_statistic' in objective_data:
+        results_table_data.append(['χ² statistic', f"{objective_data['chi2_statistic']:.4f}"])
+    
+    if len(results_table_data) > 1:
+        results_table = Table(results_table_data, colWidths=[2.5*inch, 2*inch])
+        results_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1f77b4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(results_table)
+    
+    story.append(Spacer(1, 0.1*inch))
+    
+    # Interpretation
+    story.append(Paragraph("<b>Interpretation:</b>", heading_style))
+    
+    p_val = objective_data.get('p_value', 1)
+    if p_val < 0.05:
+        interpretation = f"<b>SIGNIFICANT (p={p_val:.4f}):</b> Evidence to reject the null hypothesis."
+    else:
+        interpretation = f"<b>NOT SIGNIFICANT (p={p_val:.4f}):</b> Insufficient evidence to reject H₀."
+    
+    story.append(Paragraph(interpretation, styles['Normal']))
+    
+    doc.build(story)
+    print(f"✓ Objective {index}: {filename}")
+    
+    if os.path.exists(img_path):
+        os.remove(img_path)
+
+# Generate PDFs
+for i, obj in enumerate(objectives, 1):
+    create_objective_pdf(obj, i)
+
+print("\n" + "="*80)
+print(f"✓ ALL {len(objectives)} OBJECTIVE PDFs GENERATED")
+print("="*80)
+
+# Summary
+print("\n" + "="*80)
+print("SUMMARY STATISTICS")
+print("="*80)
+
+for i, obj in enumerate(objectives, 1):
+    p_val = obj.get('p_value', 1)
+    sig = "✓ SIGNIFICANT" if p_val < 0.05 else "✗ NOT SIGNIFICANT"
+    print(f"Obj {i:2d}: {sig:20s} (p={p_val:.4f})")
+
+print("\n" + "="*80)
+print("ANALYSIS COMPLETE - All 22 objectives processed!")
 print("="*80)
